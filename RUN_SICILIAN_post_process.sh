@@ -3,13 +3,14 @@
 
 
 ############ Input arguments ###########################
-OUT_DIR="/oak/stanford/groups/horence/Roozbeh/single_cell_project/output"   #SICILIAN output folders for  all samples in a dataset should be in ${OUT_DIR}/${RUN_NAME}#
-RUN_NAME="HLCA_171205_tumor_10X"
-GTF_FILE="/oak/stanford/groups/horence/circularRNApipeline_Cluster/index/grch38_known_genes.gtf"
-EXON_PICKLE_FILE="/oak/stanford/groups/horence/Roozbeh/single_cell_project/scripts/STAR_wrapper/annotators/hg38_refseq_exon_bounds.pkl"
-SPLICE_PICKLE_FILE="/oak/stanford/groups/horence/Roozbeh/single_cell_project/scripts/STAR_wrapper/annotators/hg38_refseq_splices.pkl"
-DATA_FORMAT="10x"  # scRNA-Seq data format, should be either 10x or SS2
-QUEUE="owners,quake"   # the queue for submitting jobs
+OUT_DIR="/exports/home/jolivieri/data/sicilian/PRJNA930874"   #SICILIAN output folders for  all samples in a dataset should be in ${OUT_DIR}/${RUN_NAME}#
+RUN_NAME="pollen"
+GENOME_NAME="TAIR10"
+GTF_FILE="/exports/home/jolivieri/data/genomes/${GENOME_NAME}/${GENOME_NAME}_GFF3_genes.gff"
+EXON_PICKLE_FILE="/exports/home/jolivieri/data/genomes/annotation_pkl_files/${GENOME_NAME}_exon_bounds.pkl"
+SPLICE_PICKLE_FILE="/exports/home/jolivieri/data/genomes/annotation_pkl_files/${GENOME_NAME}_splices.pkl"
+DATA_FORMAT="ss2"  # scRNA-Seq data format, should be either 10x or SS2
+QUEUE="node004"   # the queue for submitting jobs
 ########################################################
 
 ######## the three steps required for SICILIAN postprocessing #########
