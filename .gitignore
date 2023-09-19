@@ -11,3 +11,5 @@ Krasnow*
 *tsv
 slurm*
 *txt
+.ipynb_checkpoints/
+scripts/__pycache__/
