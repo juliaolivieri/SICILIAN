@@ -13,7 +13,10 @@ def get_args():
   return args
 
 def get_transcript_id(row):
-    return row["attribute"].split("transcript_id")[-1].split('"')[1]
+    try:
+        return row["attribute"].split("transcript_id")[-1].split('"')[1]
+    except:
+        return row["attribute"].split("Parent=")[-1]
 
 def get_exon_number(row):
   if "exon_number" in row["attribute"]:
@@ -43,6 +46,10 @@ def get_splices(gtf_df):
 #  try:
   gtf_df["exon_number"] = gtf_df.apply(get_exon_number, axis=1)
 
+  if gtf_df["exon_number"].isna().all():
+    gtf_df = gtf_df.sort_values(["seqname","start"])
+    gtf_df["exon_number"] = gtf_df.groupby("transcript_id").cumcount() + 1
+
   splices = {}
   count = 0
   t0 = time.time()
@@ -59,16 +66,21 @@ def main():
 
   args = get_args()
   gtf_df = get_gtf(args.gtf_path)
+  create_exon_bounds = False
+  create_splices = False
+  create_annotator = True
 
-  exon_bounds = get_exon_bounds(gtf_df)
-  pickle.dump(exon_bounds, open("{}/{}_exon_bounds.pkl".format(os.getcwd(), args.assembly), "wb"))
-  print("dumped exon boundary annotator to {}/{}_exon_bounds.pkl".format(os.getcwd(), args.assembly))
-
-  splices = get_splices(gtf_df)
-  pickle.dump(splices, open("{}/{}_splices.pkl".format(os.getcwd(), args.assembly), "wb"))
-  print("dumped splice junctions annotator to {}/{}_splices.pkl".format(os.getcwd(), args.assembly))
+  if create_exon_bounds:
+    exon_bounds = get_exon_bounds(gtf_df)
+    pickle.dump(exon_bounds, open("{}/{}_exon_bounds.pkl".format(os.getcwd(), args.assembly), "wb"))
+    print("dumped exon boundary annotator to {}/{}_exon_bounds.pkl".format(os.getcwd(), args.assembly))
+  if create_splices:
+    splices = get_splices(gtf_df)
+    pickle.dump(splices, open("{}/{}_splices.pkl".format(os.getcwd(), args.assembly), "wb"))
+    print("dumped splice junctions annotator to {}/{}_splices.pkl".format(os.getcwd(), args.assembly))
   
-  ann = annotator.Annotator(args.gtf_path)
-  pickle.dump(ann, open("{}/{}.pkl".format(os.getcwd(), args.assembly), "wb"))
-  print("dumped annotator to {}/{}.pkl".format(os.getcwd(), args.assembly))
+  if create_annotator:
+    ann = annotator.Annotator(args.gtf_path)
+    pickle.dump(ann, open("{}/{}.pkl".format(os.getcwd(), args.assembly), "wb"))
+    print("dumped annotator to {}/{}.pkl".format(os.getcwd(), args.assembly))
 main()

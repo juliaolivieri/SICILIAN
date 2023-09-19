@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 import argparse
+import random
 
 def sbatch_file(file_name,out_path, name, job_name, time, mem, command, dep="", dep_type = "afterok"):
   """Write sbatch script given parameters"""
@@ -15,12 +16,18 @@ def sbatch_file(file_name,out_path, name, job_name, time, mem, command, dep="", 
   job_file.write("#SBATCH --output={}{}/log_files/{}.%j.out\n".format(out_path, name,job_name))
   job_file.write("#SBATCH --error={}{}/log_files/{}.%j.err\n".format(out_path, name,job_name))
   job_file.write("#SBATCH --time={}\n".format(time))
+  job_file.write("#SBATCH --ntasks-per-node={}\n".format(48))
+  job_file.write("#SBATCH --nodelist=node00{}\n".format(random.choice([5,6,7,8])))
+#  job_file.write("#SBATCH --nodelist=node005,node006,node007,node008")
+
+
+ 
   #job_file.write("#SBATCH --qos=high_p\n")
-  job_file.write("#SBATCH -p horence,owners,quake\n")
+#  job_file.write("#SBATCH -p horence,owners,quake\n")
 #  job_file.write("#SBATCH --account=horence\n")
 #  job_file.write("#SBATCH --partition=nih_s10\n")
   job_file.write("#SBATCH --nodes=1\n")
-  job_file.write("#SBATCH --mem={}\n".format(mem)) 
+#  job_file.write("#SBATCH --mem={}\n".format(mem)) 
   if dep != "":
     job_file.write("#SBATCH --dependency={}:{}\n".format(dep_type,dep))
     job_file.write("#SBATCH --kill-on-invalid-dep=yes\n")
@@ -30,7 +37,7 @@ def sbatch_file(file_name,out_path, name, job_name, time, mem, command, dep="", 
   job_file.close()
 
 
-def GLM(out_path, name, gtf_file, single, tenX, stranded_library, domain_file, exon_pickle_file, splice_pickle_file, dep = ""):
+def GLM(out_path, name, gtf_file, single, tenX, stranded_library, domain_file, exon_pickle_file, splice_pickle_file, paired, dep = ""):
   """Run the GLM script to compute the statistical scores for junctions in the class input file"""
   command = "Rscript scripts/GLM_script_light.R {}{}/ {} ".format(out_path, name, gtf_file)
   if single:
@@ -45,6 +52,11 @@ def GLM(out_path, name, gtf_file, single, tenX, stranded_library, domain_file, e
     command += " 1 "
   else:
     command += " 0 "
+  if paired:
+    command += " 1 "
+  else:
+    command += " 0 "
+
   command += "{} {} {} ".format(domain_file, exon_pickle_file, splice_pickle_file)
   sbatch_file("run_GLM.sh", out_path, name,"GLM_{}".format(name), "48:00:00", "150Gb", command, dep=dep)  # used 200Gb for CML 80Gb for others and 300 for 10x blood3 
   return submit_job("run_GLM.sh")
@@ -58,6 +70,7 @@ def whitelist(data_path,out_path, name, bc_pattern, r_ends):
   command += "--plot-prefix={}{} ".format(data_path, name)
  # command += "--knee-method=density "
   sbatch_file("run_whitelist.sh",out_path, name, "whitelist_{}".format(name), "24:00:00", "20Gb", command)
+#  return "run_whitelist.sh"
   return submit_job("run_whitelist.sh")
 
 def extract(out_path, data_path, name, bc_pattern, r_ends, dep = ""):
@@ -72,14 +85,18 @@ def extract(out_path, data_path, name, bc_pattern, r_ends, dep = ""):
   command += "--whitelist={}{}_whitelist.txt ".format(data_path, name)
   command += "--error-correct-cell "
   sbatch_file("run_extract.sh", out_path, name,"extract_{}".format(name), "24:00:00", "20Gb", command, dep = dep)
+#  return "run_extract.sh"
   return submit_job("run_extract.sh")
 
 
-def class_input(out_path, name, gtf_file, annotator_file, tenX, single, stranded_library, dep=""):
+def class_input(out_path, name, gtf_file, annotator_file, tenX, single, stranded_library, paired, dep=""):
   """Run script to create class input file"""
   command = "python3 scripts/light_class_input.py --outpath {}{}/ --gtf {} --annotator {} --bams ".format(out_path, name, gtf_file,annotator_file) 
   if single:
     command += "{}{}/2Aligned.out.bam ".format(out_path,name)
+  elif not paired:
+    command += "{}{}/1Aligned.out.bam ".format(out_path,name)
+
   else:
     command += "{}{}/1Aligned.out.bam ".format(out_path,name)
     command += "{}{}/2Aligned.out.bam ".format(out_path,name)
@@ -87,7 +104,7 @@ def class_input(out_path, name, gtf_file, annotator_file, tenX, single, stranded
     command += "--UMI_bar "
 #  if stranded_library:
   command += "--stranded_library "
-  if not single:
+  if not single and not paired:
     command += "--paired "
   sbatch_file("run_class_input.sh", out_path, name,"class_input_{}".format(name), "48:00:00", "200Gb", command, dep=dep)  # 96:00:00, and 210 Gb for Lu, 100 for others
   return submit_job("run_class_input.sh")
@@ -97,11 +114,13 @@ def STAR_map(out_path, data_path, name, r_ends, gzip, single, gtf_file, tenX, st
   """Run script to perform mapping job for STAR"""
   command = "mkdir -p {}{}\n".format(out_path, name)
   command += "{} --version\n".format(star_path)
-  if single:
+  if single or len(r_ends) == 1:
     l = 1
   else:
     l = 0
   for i in range(l,2):
+    if len(r_ends) == 1:
+      i = 0 
     command += "{} --runThreadN 4 ".format(star_path)
     command += "--genomeDir {} ".format(star_ref_path)
     if tenX:
@@ -141,34 +160,75 @@ def submit_job(file_name):
     print("Error submitting job {} {} {}".format(status, job_num, file_name))
 
 def main():
-
 ###########################################################################################
 ################## Input arguments that should be set by the user  ########################
 ###########################################################################################
-  data_path = "/scratch/PI/horence/Roozbeh/single_cell_project/data/TSP2_SS2/RUN2/"
-  out_dir = "/scratch/PI/horence/Roozbeh/single_cell_project/output"
-  run_name = "test"
-  r_ends = ["_R1_001.fastq.gz", "_R2_001.fastq.gz"]
-  names = ["TSP2_SI_distal_SS2_B114584_B133323_Epithelial_D18_S42"]
-  star_path = "/oak/stanford/groups/horence/Roozbeh/software/STAR-2.7.5a/bin/Linux_x86_64/STAR"
-  star_ref_path = "/oak/stanford/groups/horence/Roozbeh/single_cell_project/SICILIAN_references/human/hg38_ERCC_STAR_2.7.5.a"
-  gtf_file = "/oak/stanford/groups/horence/Roozbeh/single_cell_project/SICILIAN_references/human/ucsc_known_genes/grch38_known_genes.gtf"
-  annotator_file = "/oak/stanford/groups/horence/Roozbeh/single_cell_project/SICILIAN_references/human/hg38_refseq.pkl"
-  exon_pickle_file = "/oak/stanford/groups/horence/Roozbeh/single_cell_project/SICILIAN_references/human/hg38_refseq_exon_bounds.pkl"
-  splice_pickle_file = "/oak/stanford/groups/horence/Roozbeh/single_cell_project/SICILIAN_references/human/hg38_refseq_splices.pkl"
-  domain_file = "/oak/stanford/groups/horence/Roozbeh/single_cell_project/utility_files/ucscGenePfam.txt"
+#  data_path = "/scratch/PI/horence/Roozbeh/single_cell_project/data/TSP2_SS2/RUN2/"
+#  data_path = "/exports/home/jolivieri/data/citeseq/GSE213264/"
+  data_path = "/exports/home/jolivieri/data/bulk/PRJNA930874/"
+
+#  out_dir = "/scratch/PI/horence/Roozbeh/single_cell_project/output"
+#  out_dir = "/exports/home/jolivieri/data/sicilian/GSE213264"
+  out_dir = "/exports/home/jolivieri/data/sicilian/PRJNA930874"
+
+#  run_name = "test"
+#  run_name = "Mouse_RNA"
+  run_name = "pollen"
+
+#  r_ends = ["_R1_001.fastq.gz", "_R2_001.fastq.gz"]
+#  r_ends = ["_R2_processed.fastq.gz", "_1.fastq.gz"]
+#  r_ends = ["_1.fastq"]
+  r_ends = ["_1.fastq.gz","_2.fastq.gz"]
+
+#  names = ["TSP2_SI_distal_SS2_B114584_B133323_Epithelial_D18_S42"]
+#  names = ["SRR112874{}".format(i) for i in range(10,90)]
+#  names = ["SRR233870{}".format(i) for i in range(22,27)]
+#  names = ["SRR23387044"]
+#  names = ["SRR233870{}".format(x) for x in range(27,44)]
+  names = ["SRR233870{}".format(x) for x in range(53,57)]
+
+  genome_name = "TAIR10"
+#  star_path = "/oak/stanford/groups/horence/Roozbeh/software/STAR-2.7.5a/bin/Linux_x86_64/STAR"
+  star_path = "STAR"
+#  star_ref_path = "/oak/stanford/groups/horence/Roozbeh/single_cell_project/SICILIAN_references/human/hg38_ERCC_STAR_2.7.5.a"
+#  star_ref_path = "/exports/home/jolivieri/data/genomes/STAR_indices/mm10"
+  star_ref_path = "/exports/home/jolivieri/data/genomes/STAR_indices/{}".format(genome_name)
+
+#  gtf_file = "/oak/stanford/groups/horence/Roozbeh/single_cell_project/SICILIAN_references/human/ucsc_known_genes/grch38_known_genes.gtf"
+#  gtf_file = "/exports/home/jolivieri/data/genomes/mm10/mm10.ensGene.gtf"
+#  gtf_file = "/exports/home/jolivieri/data/genomes/hg38/hg38.ensGene.gtf"
+  gtf_file = "/exports/home/jolivieri/data/genomes/{}/{}_GFF3_genes.gff".format(genome_name, genome_name)
+
+
+#  annotator_file = "/oak/stanford/groups/horence/Roozbeh/single_cell_project/SICILIAN_references/human/hg38_refseq.pkl"
+#  annotator_file = "/exports/home/jolivieri/data/genomes/annotation_pkl_files/mm10.pkl"
+  annotator_file = "/exports/home/jolivieri/data/genomes/annotation_pkl_files/{}.pkl".format(genome_name)
+
+#  exon_pickle_file = "/oak/stanford/groups/horence/Roozbeh/single_cell_project/SICILIAN_references/human/hg38_refseq_exon_bounds.pkl"
+#  exon_pickle_file = "/exports/home/jolivieri/data/genomes/annotation_pkl_files/mm10_exon_bounds.pkl"
+  exon_pickle_file = "/exports/home/jolivieri/data/genomes/annotation_pkl_files/{}_exon_bounds.pkl".format(genome_name)
+
+#  splice_pickle_file = "/oak/stanford/groups/horence/Roozbeh/single_cell_project/SICILIAN_references/human/hg38_refseq_splices.pkl"
+#  splice_pickle_file = "/exports/home/jolivieri/data/genomes/annotation_pkl_files/mm10_splices.pkl"
+  splice_pickle_file = "/exports/home/jolivieri/data/genomes/annotation_pkl_files/{}_splices.pkl".format(genome_name)
+
+#  domain_file = "/oak/stanford/groups/horence/Roozbeh/single_cell_project/utility_files/ucscGenePfam.txt"
+
+  # just a random file - not domain
+  domain_file = "/exports/home/jolivieri/data/citeseq/GSE213264/41587_2023_1676_MOESM3_ESM.csv"
   single = False
+  paired = True
   tenX = False
   stranded_library = False
-  bc_pattern = "C"*16 + "N"*12
+#  bc_pattern = "C"*16 + "N"*10
 #########################################################################################
 #########################################################################################
 #########################################################################################
 
 
 ## Toggles for deciding which steps in SICILIAN should be run #####
-  run_whitelist = False
-  run_extract = False
+  run_whitelist = True
+  run_extract = True
   run_map = True
   run_class = True
   run_GLM = True
@@ -216,14 +276,14 @@ def main():
       job_nums.append(map_jobid)
 
     if run_class:
-      class_input_jobid = class_input(out_path, name, gtf_file, annotator_file, tenX, single, stranded_library, dep=":".join(job_nums))
+      class_input_jobid = class_input(out_path, name, gtf_file, annotator_file, tenX, single, stranded_library, paired, dep=":".join(job_nums))
       jobs.append("class_input_{}.{}".format(name,class_input_jobid))
       job_nums.append(class_input_jobid)
     else:
       class_input_jobid = ""
 
     if run_GLM:
-      GLM_jobid = GLM(out_path, name, gtf_file, single, tenX, stranded_library, domain_file, exon_pickle_file, splice_pickle_file, dep=":".join(job_nums))
+      GLM_jobid = GLM(out_path, name, gtf_file, single, tenX, stranded_library, domain_file, exon_pickle_file, splice_pickle_file, paired, dep=":".join(job_nums))
       jobs.append("GLM_{}.{}".format(name,GLM_jobid))
       job_nums.append(GLM_jobid)
     else:

@@ -55,7 +55,7 @@ postprocessing_model <- function(GLM_output, class_input, is.SE, is.10X){
   GLM_output[,frac_mutimapping:=NULL]
   GLM_output = merge(GLM_output,class_input_uniq[,list(refName_newR1,frac_multimapping)],all.x=TRUE,all.y=FALSE,by.x="refName_newR1",by.y="refName_newR1")
   GLM_output[,train:=NULL]
-  if (is.SE==1){
+  if (is.paired==0){
     GLM_output[(frac_multimapping==0) &(frac_genomic_reads==0)  & (!refName_newR1%like%"chrM") &(numReads>1),train:=1]
     GLM_output[( (frac_multimapping>0.8) | (frac_genomic_reads>0.8)) & (numReads>1),train:=0]
   } else {
@@ -85,7 +85,7 @@ postprocessing_model <- function(GLM_output, class_input, is.SE, is.10X){
     GLM_output[median_overlap_R1<10,postprocess_passed:=0]
     GLM_output[ave_max_run_R1 > 9,postprocess_passed:=0]
     GLM_output[ave_entropyR1 < 4,postprocess_passed:=0]
-    if (is.SE==0){
+    if (is.paired==1){
       GLM_output[frac_anomaly == 1,postprocess_passed:=0]
     }
     GLM_output[frac_multimapping == 1,postprocess_passed:=0]
@@ -110,7 +110,7 @@ postprocessing_model <- function(GLM_output, class_input, is.SE, is.10X){
       GLM_output[ave_max_run_R1 > 9,postprocess_passed:=0]
       GLM_output[ave_entropyR1 < 4,postprocess_passed:=0]
     }
-    if (is.SE==0){
+    if (is.paired==1){
       GLM_output[frac_anomaly == 1,postprocess_passed:=0]
     }
     GLM_output[frac_multimapping == 1,postprocess_passed:=0]
@@ -130,7 +130,7 @@ postprocessing_hardthreshold <- function(GLM_output, class_input, is.10X, is.SE)
   called_junctions[,intron_length:=abs(juncPosR1A-juncPosR1B), by = 1:nrow(called_junctions)]
   
   #### filtering out the GLM report file for calling fusions
-  if (is.SE == 0){
+  if (is.paired == 1){
     called_junctions = called_junctions[(fileTypeR1=="Aligned") & numReads > 1 & emp.p_glmnet_corrected_constrained < 0.1 & frac_genomic_reads < 0.1]
   } else{
     called_junctions = called_junctions[(fileTypeR1=="Aligned") & numReads > 1 & emp.p_glmnet_constrained < 0.1 & frac_genomic_reads < 0.1]
@@ -148,7 +148,7 @@ postprocessing_hardthreshold <- function(GLM_output, class_input, is.10X, is.SE)
   
   called_junctions = data.frame(called_junctions)
   
-  if (is.SE==0){   # I need to have different column names here becuse of setcolorder
+  if (is.paired==1){   # I need to have different column names here becuse of setcolorder
     cols_to_keep = c("refName_newR1","numReads","geneR1A_uniq","geneR1B_uniq","chrR1A","juncPosR1A","juncPosR1B","gene_strandR1A","intron_length","seqR1","sd_overlap","frac_genomic_reads","ave_AT_run_R1","ave_GC_run_R1","ave_max_run_R1","junc_cdf_glmnet_corrected_constrained","emp.p_glmnet_corrected_constrained","ave_entropyR1") 
   } else {
     cols_to_keep = c("refName_newR1","numReads","numReads_per_cell","barcode","geneR1A_uniq","geneR1B_uniq","chrR1A","juncPosR1A","juncPosR1B","gene_strandR1A","intron_length","seqR1","sd_overlap","frac_genomic_reads","ave_AT_run_R1","ave_GC_run_R1","ave_max_run_R1","junc_cdf_glmnet_constrained","emp.p_glmnet_constrained","ave_entropyR1") 
@@ -275,13 +275,27 @@ add_ensembl <- function(gtf_file,directory,class_input,is.SE){
     gene_length = gtf_info[V3 == "gene",list(gene_id,length)]
   }
   
-  if(is.SE == 1){
+  print(directory)
+  if(is.SE == 0){
+
     genecount_file = paste(directory,list.files(directory, pattern = "2ReadsPerGene.out.tab", all.files = FALSE),sep = "")
+    print(genecount_file)
+    print(directory)
+    print(list.files(directory, pattern = "2ReadsPerGene.out.tab", all.files = FALSE))
+    print(paste0(directory, "2ReadsPerGene.out.tab"))
+    print("A")
   } else {
+    print("B")
     genecount_file = paste(directory,list.files(directory, pattern = "1ReadsPerGene.out.tab", all.files = FALSE),sep = "")
   }
+
+  # added specifically for this run
+  genecount_file = paste0(directory, "1ReadsPerGene.out.tab")
+
+  
   
   ######### read in gene count file #######
+  print(genecount_file) 
   gene_count = fread(genecount_file,sep = "\t",header = FALSE, skip = 4)
   if (gene_count[1,V1]%like%"ensembl"){
     gene_count = fread(genecount_file,sep = "\t",header = TRUE)
@@ -360,7 +374,7 @@ compare_classinput_STARChimOut <- function(directory,is.SE){
   star_chimeric_output_1_file = list.files(directory,pattern = "2Chimeric.out.junction")
   #  star_fusion_file = list.files(directory,pattern = "star-fusion.fusion_predictions.abridged.tsv" , recursive = TRUE)
   
-  if (is.SE == 0){
+  if (is.paired == 1){
     star_SJ_output_1_file = list.files(directory,pattern = "1SJ.out.tab")
     star_SJ_output_2_file = list.files(directory,pattern = "2SJ.out.tab")
     star_chimeric_output_1_file = list.files(directory,pattern = "1Chimeric.out.junction")
@@ -489,6 +503,7 @@ gtf_file = args[2]
 is.SE = as.numeric(args[3])
 is.10X = as.numeric(args[4])
 is.stranded = as.numeric(args[5])
+is.paired = as.numeric(args[6])
 #####################################
 toc()
 
@@ -511,7 +526,7 @@ if(is.10X == 1){
 }
 
 setkey(class_input,refName_newR1)
-if(is.SE ==0){  # I want to discard those reads that have an unaligned R2 in PE data
+if(is.paired ==1){  # I want to discard those reads that have an unaligned R2 in PE data
   class_input = class_input[!is.na(nmmR2A)]
 }
 
@@ -561,7 +576,7 @@ class_input[, geneR1B_uniq:=strsplit(refName_newR1, split = ":", fixed = TRUE)[[
 toc()
 
 ## add ensembl ids
-class_input = add_ensembl(gtf_file,directory,class_input,is.SE)
+#class_input = add_ensembl(gtf_file,directory,class_input,is.SE)
 
 class_input[fileTypeR1 == "Chimeric",is.STAR_Chim := ""]
 class_input[fileTypeR1 == "Aligned",is.STAR_SJ := ""]
@@ -629,7 +644,7 @@ class_input[, junc_pos2_R1:= NULL]
 
 
 ## the same predictors for R2
-if (is.SE == 0){
+if (is.paired == 1){
   ### obtain fragment lengths for chimeric reads for computing length adjusted AS ##########
   class_input[fileTypeR2 == "Aligned", length_adj_AS_R2:= aScoreR2A/readLenR2]
   class_input[fileTypeR2 == "Chimeric", length_adj_AS_R2 := (aScoreR2A + aScoreR2B)/ (MR2A + MR2B + SR2A + SR2B)]
@@ -679,14 +694,14 @@ if (n.pos >= n.neg){
 tic("GLMnet constrained")
 print("GLMnet constrained")
 
-if (is.SE == 0){
+if (is.paired == 1){
   regression_formula = as.formula("train_class ~ overlap_R1 * max_overlap_R1 + NHR1A + nmmR1 + MR1A:SR1A + MR1B:SR1B + length_adj_AS_R1 + nmmR2 + length_adj_AS_R2 + NHR2A + entropyR1*entropyR2 + location_compatible + read_strand_compatible")
 } else {
   regression_formula = as.formula("train_class ~ overlap_R1 * max_overlap_R1 + NHR1A + nmmR1 + MR1A:SR1A +  MR1B:SR1B + entropyR1 + length_adj_AS_R1 + entropyR1:NHR1A + entropyR1:length_adj_AS_R1")
 }
 
 x_glmnet = model.matrix(regression_formula, class_input[!is.na(train_class)])
-if (is.SE==0){
+if (is.paired==1){
   glmnet_model_constrained = cv.glmnet(x_glmnet, as.factor(class_input[!is.na(train_class)]$train_class), family =c("binomial"), class_input[!is.na(train_class)]$cur_weight, intercept = FALSE, alpha = 1, nlambda = 50, nfolds = 5, upper.limits=c(rep(Inf,3),0,0, rep(Inf,12)), lower.limits=c(-Inf,0,0, rep(-Inf,2),0, rep(-Inf,3),0,0,0,0, rep(-Inf,4)) )
 }else{
   glmnet_model_constrained = cv.glmnet(x_glmnet, as.factor(class_input[!is.na(train_class)]$train_class), family =c("binomial"), class_input[!is.na(train_class)]$cur_weight, intercept = FALSE, alpha = 1, nlambda = 50, nfolds = 5, upper.limits=c(rep(Inf,3),0,0, rep(Inf,7)), lower.limits=c(-Inf,0,0, rep(-Inf,2),0,0, rep(-Inf,4),0) )
@@ -725,7 +740,7 @@ class_input = compute_junc_cdf(class_input , "p_predicted_glmnet_constrained", "
 print("done with GLMnet constrained")
 
 
-if (is.SE==0){
+if (is.paired==1){
   tic("GLMnet corrected constrained")
   class_input[, glmnet_per_read_prob_corrected_constrained := glmnet_per_read_prob_constrained]
   class_input[(location_compatible==0 | read_strand_compatible==0), glmnet_per_read_prob_corrected_constrained:=glmnet_per_read_prob_constrained/(1 + glmnet_per_read_prob_constrained)]
@@ -772,7 +787,7 @@ if (nrow(class_input[fileTypeR1=="Chimeric"])>0){
   ################################################################
   ######## Building the GLMnet for chimeric junctions ############
   ################################################################
-  if (is.SE == 0){
+  if (is.paired == 1){
     regression_formula = as.formula("train_class ~ overlap_R1 * max_overlap_R1  + nmmR1 + length_adj_AS_R1A + length_adj_AS_R1B + nmmR2 + entropyR1*entropyR2 + length_adj_AS_R2")
   } else{
     regression_formula = as.formula("train_class ~ overlap_R1 * max_overlap_R1  + nmmR1 + length_adj_AS_R1A + length_adj_AS_R1B + entropyR1")
@@ -781,7 +796,7 @@ if (nrow(class_input[fileTypeR1=="Chimeric"])>0){
   tic("Two-step GLMnet constrained")
   print("Two-step GLMnet constrained")
   x_glmnet = model.matrix(regression_formula, class_input[!is.na(train_class)])
-  if (is.SE == 0){
+  if (is.paired == 1){
     glmnet_model_constrained = cv.glmnet(x_glmnet, as.factor(class_input[!is.na(train_class)]$train_class), family =c("binomial"), class_input[!is.na(train_class)]$cur_weight, intercept = FALSE, alpha = 1, nlambda = 50, nfolds = 5, upper.limits = c(rep(Inf,3),0, rep(Inf,8)), lower.limits = c(-Inf,0,0,-Inf,0,0,-Inf,0,0,-Inf,-Inf,-Inf))
   }else{
     glmnet_model_constrained = cv.glmnet(x_glmnet, as.factor(class_input[!is.na(train_class)]$train_class), family =c("binomial"), class_input[!is.na(train_class)]$cur_weight, intercept = FALSE, alpha = 1, nlambda = 50, nfolds = 5, upper.limits = c(rep(Inf,3),0, rep(Inf,4)), lower.limits = c(-Inf,0,0,-Inf,0,0,0,-Inf))
@@ -815,7 +830,7 @@ class_input[, ave_max_run_R1:=mean(max_run_R1), by = refName_newR1]
 class_input[, ave_entropyR1:=mean(entropyR1), by = refName_newR1]
 class_input[, min_entropyR1:=min(entropyR1), by = refName_newR1]
 
-if (is.SE == 0){
+if (is.paired == 1){
   class_input[, frac_anomaly:=0]
   class_input[(location_compatible==0 | read_strand_compatible==0), frac_anomaly:=.N/numReads, by = refName_newR1] # the fraction of anomalous reads for each junction
   class_input[, ave_AT_run_R2:=mean(AT_run_R2), by = refName_newR1]
@@ -855,7 +870,7 @@ GLM_output = GLM_output[!(duplicated(refName_newR1))]
 null_dist = GLM_output[is.na(is.STAR_Chim) & frac_genomic_reads > 0.1]$junc_cdf_glmnet_constrained
 GLM_output[, emp.p_glmnet_constrained:=length(which(null_dist>junc_cdf_glmnet_constrained))/length(null_dist), by = junc_cdf_glmnet_constrained]
 
-if (is.SE == 0){
+if (is.paired == 1){
   null_dist = GLM_output[is.na(is.STAR_Chim) & frac_genomic_reads>0.1]$junc_cdf_glmnet_corrected_constrained
   GLM_output[, emp.p_glmnet_corrected_constrained:=length(which(null_dist>junc_cdf_glmnet_corrected_constrained))/length(null_dist), by = junc_cdf_glmnet_corrected_constrained]
 }

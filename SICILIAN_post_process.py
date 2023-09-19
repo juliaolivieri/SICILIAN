@@ -40,13 +40,13 @@ def consolidate(out_path, run_name, data_format, exon_pickle_file, splice_pickle
   else:
     command += " 0 "
   sbatch_file("run_consolidate.sh", out_path, run_name,"consolidate_{}".format(run_name), "48:00:00", "150Gb", command, queue, dep=dep)  # used 200Gb for CML 80Gb for others and 300 for 10x blood3
-  return submit_job("run_consolidate.sh")
+#  return submit_job("run_consolidate.sh")
 
 def process(out_path, run_name, gtf_file, exon_pickle_file, splice_pickle_file, queue, dep = ""):
   "Run the consolidate_GLM_output_files.R script to consolidated all GLM output files within an output directory into a single file"
   command = "python3 scripts/Process_CI_10x.py -d {} -o {} -g {} -e {} -s {}".format(out_path, run_name, gtf_file, exon_pickle_file, splice_pickle_file)
   sbatch_file("run_process.sh", out_path, run_name,"process_{}".format(run_name), "48:00:00", "350Gb", command, queue, dep=dep)  # used 200Gb for CML 80Gb for others and 300 for 10x blood3
-  return submit_job("run_process.sh")
+#  return submit_job("run_process.sh")
 
 def postprocess(out_path, run_name, data_format, queue, dep = ""):
   "Run the consolidate_GLM_output_files.R script to consolidated all GLM output files within an output directory into a single file"
@@ -57,7 +57,7 @@ def postprocess(out_path, run_name, data_format, queue, dep = ""):
     command += " 0 "
 
   sbatch_file("run_postprocess.sh", out_path, run_name,"postprocess_{}".format(run_name), "48:00:00", "200Gb", command, queue, dep=dep)  # used 200Gb for CML 80Gb for others and 300 for 10x blood3
-  return submit_job("run_postprocess.sh")
+#  return submit_job("run_postprocess.sh")
 
 def submit_job(file_name):
   """Submit sbatch job to cluster"""
@@ -123,21 +123,21 @@ def main():
     os.makedirs("{}postprocess_log_files".format(out_path))
 
   if run_consolidate:
-    consolidate_jobid = consolidate(out_path, run_name, data_format, exon_pickle_file, splice_pickle_file, queue)
-    jobs.append("consolidate_{}.{}".format(run_name, consolidate_jobid))
-    job_nums.append(consolidate_jobid)
+    consolidate(out_path, run_name, data_format, exon_pickle_file, splice_pickle_file, queue)
+    #jobs.append("consolidate_{}.{}".format(run_name, consolidate_jobid))
+    #job_nums.append(consolidate_jobid)
   else:
     consolidate_jobid = ""
   if run_process:
-    process_jobid = process(out_path, run_name, gtf_file, exon_pickle_file, splice_pickle_file, queue, dep = ":".join(job_nums))
-    jobs.append("process_{}.{}".format(run_name, process_jobid))
-    job_nums.append(process_jobid)
+    process(out_path, run_name, gtf_file, exon_pickle_file, splice_pickle_file, queue, dep = ":".join(job_nums))
+    #jobs.append("process_{}.{}".format(run_name, process_jobid))
+    #job_nums.append(process_jobid)
   else:
     process_jobid = ""
   if run_postprocess:
-    postprocess_jobid = postprocess(out_path, run_name, data_format, queue, dep = ":".join(job_nums))
-    jobs.append("postprocess_{}.{}".format(run_name, postprocess_jobid))
-    job_nums.append(postprocess_jobid)
+    postprocess(out_path, run_name, data_format, queue, dep = ":".join(job_nums))
+    #jobs.append("postprocess_{}.{}".format(run_name, postprocess_jobid))
+    #job_nums.append(postprocess_jobid)
   else:
     postprocess_jobid = ""
 main()

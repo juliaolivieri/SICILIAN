@@ -6,8 +6,10 @@ def get_gene_id(row):
     return row["attribute"].split("gene_name")[-1].split('"')[1]
   elif ";gene=" in row["attribute"]:
     return row["attribute"].split(";gene=")[-1].split(";")[0]
-  if "gene_id" in row["attribute"]:
+  elif "gene_id" in row["attribute"]:
     return row["attribute"].split("gene_id")[-1].split('"')[1]
+  elif "Parent" in row["attribute"]:
+    return row["attribute"].split("Parent=")[-1].split(";")[0].split(".")[0]
 
 def round_down(num, divisor): 
     return num - (num%divisor)
@@ -71,7 +73,11 @@ class Annotator:
                 print("gene_id",gene_id)
                 print("end failed",gene_df)
               for j in range(round_down(start,self.jump),round_down(end + self.jump, self.jump),self.jump):
-                  gtf_dict[seqname][j][gene_id] = [start,end, strand] 
+                  try:
+                    gtf_dict[seqname][j][gene_id] = [start,end, strand] 
+                  except:
+                    print("gene_id", gene_id)
+                    print("failed", j)
     self.gtf_dict = gtf_dict
 
   def get_name_given_locus(self, seqname, position, read_strand = "", stranded_library = False): 
